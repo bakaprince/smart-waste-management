@@ -180,7 +180,7 @@ EMAIL_PASS=your_app_password
 GOOGLE_MAPS_API_KEY=your_maps_api_key
 ```
 
-## 🏆 Hackathon Ready Features
+## 🏆Features
 
 ### Demo Script
 1. **Show Dashboard** - Real-time monitoring
@@ -216,15 +216,3 @@ The system includes sample data for Mumbai with 3 localities:
 - **Bandra West**: 5 bins, moderate levels  
 - **Andheri East**: 5 bins, varying levels
 
-Perfect for hackathon demos and real-world testing!
-
-## 🏅 Awards Potential
-
-This project demonstrates:
-- **Technical Excellence**: Full-stack with modern APIs
-- **Real-world Impact**: Solves actual municipal problems
-- **Scalability**: Cloud-ready architecture
-- **Innovation**: IoT + AI for smart cities
-- **User Experience**: Intuitive multi-platform interface
-
-Ready to win your hackathon! 🏆

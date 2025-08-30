@@ -1,7 +1,11 @@
-const twilio = require('twilio');
 const nodemailer = require('nodemailer');
 
-const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+// Initialize Twilio only if credentials are provided
+let client = null;
+if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+  const twilio = require('twilio');
+  client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+}
 
 // Email transporter
 const transporter = nodemailer.createTransporter({
@@ -14,7 +18,10 @@ const transporter = nodemailer.createTransporter({
 
 async function sendSMSAlert(locality, avgLevel) {
   try {
-    if (!locality.municipalContact?.phone) return;
+    if (!client || !locality.municipalContact?.phone) {
+      console.log(`SMS Alert (Demo): ${locality.name} is ${avgLevel}% full - Collection required!`);
+      return { demo: true, message: 'SMS would be sent in production' };
+    }
     
     const message = await client.messages.create({
       body: `🚨 WASTE ALERT: ${locality.name} locality is ${avgLevel}% full. Immediate collection required. Location: ${locality.city}`,
@@ -26,12 +33,16 @@ async function sendSMSAlert(locality, avgLevel) {
     return message;
   } catch (error) {
     console.error('SMS Error:', error.message);
+    console.log(`SMS Alert (Demo): ${locality.name} is ${avgLevel}% full - Collection required!`);
   }
 }
 
 async function sendEmailAlert(locality, avgLevel) {
   try {
-    if (!locality.municipalContact?.email) return;
+    if (!process.env.EMAIL_USER || !locality.municipalContact?.email) {
+      console.log(`Email Alert (Demo): ${locality.name} is ${avgLevel}% full - Collection required!`);
+      return { demo: true, message: 'Email would be sent in production' };
+    }
     
     const mailOptions = {
       from: process.env.EMAIL_USER,
@@ -53,6 +64,7 @@ async function sendEmailAlert(locality, avgLevel) {
     return info;
   } catch (error) {
     console.error('Email Error:', error.message);
+    console.log(`Email Alert (Demo): ${locality.name} is ${avgLevel}% full - Collection required!`);
   }
 }
 

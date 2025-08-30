@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Waste Management Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; }
+        .header { background: #2c3e50; color: white; padding: 1rem; text-align: center; }
+        .nav { background: #34495e; padding: 0.5rem; text-align: center; }
+        .nav button { background: #3498db; color: white; border: none; padding: 0.5rem 1rem; margin: 0 0.5rem; border-radius: 4px; cursor: pointer; }
+        .nav button.active { background: #e74c3c; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+        .card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .locality-card { border-left: 4px solid #3498db; }
+        .locality-card.warning { border-left-color: #f39c12; }
+        .locality-card.danger { border-left-color: #e74c3c; }
+        .waste-level { font-size: 2rem; font-weight: bold; margin: 0.5rem 0; }
+        .alerts { margin-top: 2rem; }
+        .alert { background: #fff3cd; border: 1px solid #ffeaa7; padding: 1rem; margin: 0.5rem 0; border-radius: 4px; }
+        .btn { background: #3498db; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; }
+        .btn:hover { background: #2980b9; }
+        .btn.danger { background: #e74c3c; }
+        .btn.danger:hover { background: #c0392b; }
+        #map { height: 400px; width: 100%; border-radius: 8px; }
+        .hidden { display: none; }
+        .route-card { background: #e8f5e8; border-left: 4px solid #27ae60; }
+        .priority-high { background: #ffebee; border-left-color: #f44336; }
+        .priority-medium { background: #fff3e0; border-left-color: #ff9800; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🗑️ Smart Waste Management System</h1>
+        <p>Real-time monitoring and route optimization</p>
+    </div>
+
+    <div class="nav">
+        <button onclick="showSection('dashboard')" class="active" id="dash-btn">Dashboard</button>
+        <button onclick="showSection('map')" id="map-btn">Live Map</button>
+        <button onclick="showSection('routes')" id="routes-btn">Collection Routes</button>
+        <button onclick="showSection('mobile')" id="mobile-btn">Mobile App</button>
+    </div>
+
+    <div class="container">
+        <!-- Dashboard Section -->
+        <div id="dashboard-section">
+            <div id="localities" class="grid"></div>
+            <div class="alerts">
+                <h2>🚨 Recent Alerts</h2>
+                <div id="alerts-list"></div>
+            </div>
+        </div>
+
+        <!-- Map Section -->
+        <div id="map-section" class="hidden">
+            <div class="card">
+                <h2>📍 Live Bin Locations</h2>
+                <div id="map"></div>
+                <p style="margin-top: 1rem; color: #666;">
+                    🔴 Red: >70% full | 🟡 Yellow: 50-70% | 🟢 Green: <50%
+                </p>
+            </div>
+        </div>
+
+        <!-- Routes Section -->
+        <div id="routes-section" class="hidden">
+            <div class="card">
+                <h2>🚛 Collection Routes</h2>
+                <div id="collection-needed"></div>
+            </div>
+        </div>
+
+        <!-- Mobile App Section -->
+        <div id="mobile-section" class="hidden">
+            <div class="card">
+                <h2>📱 Mobile Waste Tracker</h2>
+                <div style="max-width: 400px; margin: 0 auto; background: #000; border-radius: 20px; padding: 20px;">
+                    <div style="background: #fff; border-radius: 15px; padding: 20px; min-height: 500px;">
+                        <div style="text-align: center; margin-bottom: 20px;">
+                            <h3 style="color: #2c3e50;">🗑️ Waste Tracker</h3>
+                            <p style="color: #666; font-size: 14px;">Municipal Collection App</p>
+                        </div>
+                        
+                        <div id="mobile-localities" style="max-height: 400px; overflow-y: auto;"></div>
+                        
+                        <div style="margin-top: 20px; text-align: center;">
+                            <button class="btn" onclick="refreshMobileData()">🔄 Refresh</button>
+                            <button class="btn danger" onclick="simulateCollection()">✅ Mark Collected</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let map, localities = [], bins = [];
+
+        function showSection(section) {
+            // Hide all sections
+            document.querySelectorAll('[id$="-section"]').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
+            
+            // Show selected section
+            document.getElementById(section + '-section').classList.remove('hidden');
+            document.getElementById(section.substring(0, 4) + '-btn').classList.add('active');
+            
+            if (section === 'map') initMap();
+            if (section === 'routes') loadRoutes();
+            if (section === 'mobile') loadMobileView();
+        }
+
+        async function loadDashboard() {
+            try {
+                const localitiesRes = await fetch('/api/localities');
+                localities = await localitiesRes.json();
+                
+                const localitiesDiv = document.getElementById('localities');
+                localitiesDiv.innerHTML = localities.map(locality => {
+                    const level = locality.avgWasteLevel;
+                    const cardClass = level >= 70 ? 'danger' : level >= 50 ? 'warning' : '';
+                    
+                    return `
+                        <div class="card locality-card ${cardClass}">
+                            <h3>${locality.name}</h3>
+                            <p>📍 ${locality.city}</p>
+                            <div class="waste-level">${level}%</div>
+                            <p>🗑️ ${locality.binCount} bins</p>
+                            ${level >= 70 ? '<p style="color: #e74c3c; font-weight: bold;">⚠️ Collection Required</p>' : ''}
+                            <button class="btn" onclick="testAlert('${locality._id}')">🔔 Test Alert</button>
+                        </div>
+                    `;
+                }).join('');
+
+                const alertsRes = await fetch('/api/alerts');
+                const alerts = await alertsRes.json();
+                
+                const alertsDiv = document.getElementById('alerts-list');
+                alertsDiv.innerHTML = alerts.slice(0, 5).map(alert => `
+                    <div class="alert">
+                        <strong>${alert.locality.name}</strong> - ${alert.message}
+                        <br><small>📅 ${new Date(alert.createdAt).toLocaleString()}</small>
+                        <span style="float: right; background: ${alert.status === 'pending' ? '#f39c12' : '#27ae60'}; color: white; padding: 0.2rem 0.5rem; border-radius: 3px; font-size: 0.8rem;">
+                            ${alert.status.toUpperCase()}
+                        </span>
+                    </div>
+                `).join('') || '<p>No alerts</p>';
+
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            }
+        }
+
+        async function initMap() {
+            if (typeof google === 'undefined') {
+                document.getElementById('map').innerHTML = '<p style="text-align: center; padding: 50px;">Google Maps API key required for map view</p>';
+                return;
+            }
+            
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 12,
+                center: { lat: 19.0760, lng: 72.8777 }
+            });
+
+            const binsRes = await fetch('/api/bins');
+            bins = await binsRes.json();
+
+            bins.forEach(bin => {
+                const color = bin.wasteLevel >= 70 ? 'red' : bin.wasteLevel >= 50 ? 'yellow' : 'green';
+                
+                new google.maps.Marker({
+                    position: { lat: bin.location.latitude, lng: bin.location.longitude },
+                    map: map,
+                    title: `${bin.binId}: ${bin.wasteLevel}% full`,
+                    icon: `http://maps.google.com/mapfiles/ms/icons/${color}-dot.png`
+                });
+            });
+        }
+
+        async function loadRoutes() {
+            const res = await fetch('/api/routes/collection-needed');
+            const collectionData = await res.json();
+            
+            const container = document.getElementById('collection-needed');
+            container.innerHTML = collectionData.map(item => `
+                <div class="card route-card priority-${item.priority.toLowerCase()}">
+                    <h3>🚛 ${item.locality}</h3>
+                    <p><strong>Priority:</strong> ${item.priority}</p>
+                    <p><strong>Average Waste:</strong> ${item.avgWasteLevel}%</p>
+                    <p><strong>Bins to Collect:</strong> ${item.binsRequiringCollection}/${item.totalBins}</p>
+                    <button class="btn" onclick="getOptimizedRoute('${item.locality}')">📍 Get Route</button>
+                </div>
+            `).join('') || '<p>No collections needed</p>';
+        }
+
+        async function loadMobileView() {
+            const container = document.getElementById('mobile-localities');
+            container.innerHTML = localities.map(locality => {
+                const level = locality.avgWasteLevel;
+                const emoji = level >= 70 ? '🔴' : level >= 50 ? '🟡' : '🟢';
+                
+                return `
+                    <div style="background: #f8f9fa; margin: 10px 0; padding: 15px; border-radius: 10px; border-left: 4px solid ${level >= 70 ? '#e74c3c' : level >= 50 ? '#f39c12' : '#27ae60'};">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>${locality.name}</strong>
+                                <br><small style="color: #666;">${locality.binCount} bins</small>
+                            </div>
+                            <div style="text-align: right;">
+                                <span style="font-size: 24px;">${emoji}</span>
+                                <br><strong>${level}%</strong>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function testAlert(localityId) {
+            try {
+                const res = await fetch(`/api/test-alert/${localityId}`, { method: 'POST' });
+                const result = await res.json();
+                alert(`Test alert sent! Average level: ${result.avgLevel}%`);
+            } catch (error) {
+                alert('Error sending test alert');
+            }
+        }
+
+        function refreshMobileData() {
+            loadMobileView();
+        }
+
+        function simulateCollection() {
+            alert('Collection marked as completed! 📱✅');
+        }
+
+        // Load dashboard on page load
+        loadDashboard();
+        setInterval(loadDashboard, 30000);
+    </script>
+    
+    <!-- Google Maps API (replace YOUR_API_KEY) -->
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap"></script>
+</body>
+</html>
